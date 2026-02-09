@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Any
 
 from .utils import apply_reduction, get_window
-from .perceptual import SumAndDifference, FIRFilter
+from .perceptual import SumAndDifference, IIRFilter
 
 
 class SpectralConvergenceLoss(torch.nn.Module):
@@ -41,7 +41,9 @@ class STFTMagnitudeLoss(torch.nn.Module):
         reduction (str, optional): Reduction of the loss elements. Default: "mean"
     """
 
-    def __init__(self, log=True, log_eps=0.0, log_fac=1.0, distance="L1", reduction="mean"):
+    def __init__(
+        self, log=True, log_eps=0.0, log_fac=1.0, distance="L1", reduction="mean"
+    ):
         super(STFTMagnitudeLoss, self).__init__()
 
         self.log = log
@@ -126,7 +128,7 @@ class STFTLoss(torch.nn.Module):
         reduction: str = "mean",
         mag_distance: str = "L1",
         device: Any = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.fft_size = fft_size
@@ -152,16 +154,10 @@ class STFTLoss(torch.nn.Module):
 
         self.spectralconv = SpectralConvergenceLoss()
         self.logstft = STFTMagnitudeLoss(
-            log=True,
-            reduction=reduction,
-            distance=mag_distance,
-            **kwargs
+            log=True, reduction=reduction, distance=mag_distance, **kwargs
         )
         self.linstft = STFTMagnitudeLoss(
-            log=False,
-            reduction=reduction,
-            distance=mag_distance,
-            **kwargs
+            log=False, reduction=reduction, distance=mag_distance, **kwargs
         )
 
         # setup mel filterbank
@@ -200,7 +196,7 @@ class STFTLoss(torch.nn.Module):
                 raise ValueError(
                     f"`sample_rate` must be supplied when `perceptual_weighting = True`."
                 )
-            self.prefilter = FIRFilter(filter_type="aw", fs=sample_rate)
+            self.prefilter = IIRFilter(filter_type="aw", fs=sample_rate)
 
     def stft(self, x):
         """Perform STFT.
