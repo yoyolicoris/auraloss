@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from philtorch.lti import lfilter, fir
 
 
 class SumAndDifference(torch.nn.Module):
@@ -112,6 +113,7 @@ class FIRFilter(torch.nn.Module):
 
             if plot:
                 from .plotting import compare_filters
+
                 compare_filters(b, a, taps, fs=fs)
 
     def forward(self, input, target):
@@ -129,3 +131,83 @@ class FIRFilter(torch.nn.Module):
             target, self.fir.weight.data, padding=self.ntaps // 2
         )
         return input, target
+
+
+class IIRFilter(torch.nn.Module):
+    """IIR pre-emphasis filtering module.
+
+    Args:
+        filter_type (str): Shape of the desired FIR filter ("hp", "fd", "aw"). Default: "hp"
+        coef (float): Coefficient value for the filter tap (only applicable for "hp" and "fd"). Default: 0.85
+        plot (bool): Plot the magnitude respond of the filter. Default: False
+
+    Based upon the perceptual loss pre-empahsis filters proposed by
+    [Wright & Välimäki, 2019](https://arxiv.org/abs/1911.08922).
+
+    A-weighting filter - "aw"
+    First-order highpass - "hp"
+    Folded differentiator - "fd"
+
+    Note that the default coefficeint value of 0.85 is optimized for
+    a sampling rate of 44.1 kHz, considering adjusting this value at differnt sampling rates.
+    """
+
+    def __init__(self, filter_type="hp", coef=0.85, fs=44100, **kwargs):
+        """Initilize IIR pre-emphasis filtering module."""
+        super(IIRFilter, self).__init__()
+        self.filter_type = filter_type
+        self.coef = coef
+        self.fs = fs
+        self.kwargs = kwargs
+
+        import scipy.signal
+
+        if filter_type == "hp":
+            # self.fir.weight.data = torch.tensor([1, -coef, 0]).view(1, 1, -1)
+            self.register_buffer("b", torch.tensor([1.0, -coef]))
+        elif filter_type == "fd":
+            self.register_buffer("b", torch.tensor([1.0, 0.0, -coef]))
+        elif filter_type == "aw":
+            # Definition of analog A-weighting filter according to IEC/CD 1672.
+            f1 = 20.598997
+            f2 = 107.65265
+            f3 = 737.86223
+            f4 = 12194.217
+            A1000 = 1.9997
+
+            NUMs = [(2 * np.pi * f4) ** 2 * (10 ** (A1000 / 20)), 0, 0, 0, 0]
+            DENs = np.polymul(
+                [1, 4 * np.pi * f4, (2 * np.pi * f4) ** 2],
+                [1, 4 * np.pi * f1, (2 * np.pi * f1) ** 2],
+            )
+            DENs = np.polymul(
+                np.polymul(DENs, [1, 2 * np.pi * f3]), [1, 2 * np.pi * f2]
+            )
+
+            # convert analog filter to digital filter
+            b, a = scipy.signal.bilinear(NUMs, DENs, fs=fs)
+            sos = scipy.signal.tf2sos(b, a)
+            bq_b, bq_a = sos[:, :3], sos[:, 3:]
+
+            self.register_buffer("bq_b", torch.from_numpy(bq_b / bq_a[:, :1]))
+            self.register_buffer("bq_a", torch.from_numpy(a[:, 1:] / a[:, :1]))
+
+    def forward(self, input, target):
+        """Calculate forward propagation.
+        Args:
+            input (Tensor): Predicted signal (B, #channels, #samples).
+            target (Tensor): Groundtruth signal (B, #channels, #samples).
+        Returns:
+            Tensor: Filtered signal.
+        """
+        cat = torch.cat([input, target], dim=0).flatten(0, 1)
+
+        if hasattr(self, "bq_b"):
+            # IIR A-weighting filter
+            filtered = cat
+            for b, a in zip(self.bq_b.unbind(0), self.bq_a.unbind(0)):
+                filtered = lfilter(b, a, filtered, zi=None, **self.kwargs)
+        else:
+            filtered = fir(self.b.repeat(cat.size(0), 1), cat)
+
+        return filtered.unflatten(0, (-1, input.size(1))).chunk(2, dim=0)
