@@ -189,8 +189,10 @@ class IIRFilter(torch.nn.Module):
             sos = scipy.signal.tf2sos(b, a)
             bq_b, bq_a = sos[:, :3], sos[:, 3:]
 
-            self.register_buffer("bq_b", torch.from_numpy(bq_b / bq_a[:, :1]))
-            self.register_buffer("bq_a", torch.from_numpy(a[:, 1:] / a[:, :1]))
+            self.register_buffer("bq_b", torch.from_numpy(bq_b / bq_a[:, :1]).float())
+            self.register_buffer(
+                "bq_a", torch.from_numpy(bq_a[:, 1:] / bq_a[:, :1]).float()
+            )
 
     def forward(self, input, target):
         """Calculate forward propagation.
