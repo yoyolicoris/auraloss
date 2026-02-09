@@ -2,11 +2,17 @@
 name = "auraloss"
 version = "0.4.0"
 description = "Collection of audio-focused loss functions in PyTorch."
-authors = [
-    { name = "Christian Steinmetz" },
-    { email = "c.j.steinmetz@qmul.ac.uk" },
-]
+readme = "README.md"
+requires-python = ">=3.6.0"
+authors = [{ name = "Christian Steinmetz", email = "c.j.steinmetz@qmul.ac.uk" }]
 dependencies = ["torch", "numpy"]
+license = { text = "Apache License 2.0" }
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Scientific/Engineering",
+]
+urls = { "Homepage" = "https://github.com/csteinmetz1/auraloss" }
 
 [build-system]
 # Minimum requirements for the build system to execute.
@@ -14,4 +20,5 @@ requires = ["setuptools", "wheel", "attrs"]
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
-all = ["matplotlib", "librosa", "scipy", "scipy"]
+all = ["matplotlib", "librosa", "scipy"]
+test = ["resampy"]
